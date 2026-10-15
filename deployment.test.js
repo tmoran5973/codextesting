@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 
 async function start(dir) {
- const child=spawn(process.execPath,['server.js'],{cwd:import.meta.dirname,env:{...process.env,NODE_ENV:'production',DEMO_PASSWORD:'integration-only-password',DATABASE_URL:'',VERCEL:'',COLORING_API_KEY:'',PORT:'0',HOST:'127.0.0.1',DATA_DIR:dir},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['server.js'],{cwd:import.meta.dirname,env:{...process.env,NODE_ENV:'production',DEMO_PASSWORD:'integration-only-password',DATABASE_URL:'',SUPABASE_URL:'',SUPABASE_SERVICE_ROLE_KEY:'',RENDER:'',VERCEL:'',COLORING_API_KEY:'',PORT:'0',HOST:'127.0.0.1',DATA_DIR:dir},stdio:['ignore','pipe','pipe']});
  let text='';
  const port=await new Promise((resolve,reject)=>{
   const timeout=setTimeout(()=>{child.kill();reject(new Error('Server startup timed out'));},10000);

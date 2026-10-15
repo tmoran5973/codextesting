@@ -82,7 +82,7 @@ async function handle(req, res) {
       return reply(res, 401, { error: 'Sign in with username studio and your demo password.' });
     }
     if (req.method === 'GET' && url.pathname === '/api/settings') return reply(res, 200, publicKeyStatus(state().credentials));
-    if (req.method === 'GET' && url.pathname === '/api/projects') return reply(res, 200, { projects: state().projects, configured: !!state().credentials.key, busy: state().busy, imageReservation: rate('IMAGE_RESERVATION_USD', .5), reviewReservation: rate('REVIEW_RESERVATION_USD', .05) });
+    if (req.method === 'GET' && url.pathname === '/api/projects') return reply(res, 200, { projects: state().projects, storage: storage.backendName(), configured: !!state().credentials.key, busy: state().busy, imageReservation: rate('IMAGE_RESERVATION_USD', .5), reviewReservation: rate('REVIEW_RESERVATION_USD', .05) });
     if (url.pathname.startsWith('/api/') && req.method === 'POST') {
       // Bind to loopback by default; reject cross-origin browser mutations.
       if (!sameOrigin(req.headers.origin, req.headers.host)) return reply(res, 403, { error: 'Cross-origin request rejected.' });
@@ -147,6 +147,8 @@ export async function requestHandler(req, res) {
    return reply(res, 401, {error:'Sign in with username studio and your demo password.'});
   }
   if(req.method === 'POST') {lease=await storage.acquire();if(!lease)return reply(res,409,{error:'An agent is working. Wait until it finishes.'});}
+  const requestPath=new URL(req.url,'http://localhost').pathname;
+  if(req.method==='GET'&&['/','/app.js','/style.css'].includes(requestPath))return await handle(req,res);
   const loaded=await storage.load();
   // An expired lease means a previous serverless invocation was interrupted.
   if(!loaded.busy || lease) for(const project of loaded.projects) if(project.status==='running') {project.status='paused';project.error='Previous job was interrupted. Review completed pages before continuing.';}
@@ -154,7 +156,7 @@ export async function requestHandler(req, res) {
   await context.run({...loaded,lease,credentials},()=>handle(req,res));
  } catch(e) {
   console.error('Request failed:', e.name);
-  if(!res.headersSent)reply(res,503,{error:'Storage is unavailable. Check the deployment database configuration.'});else res.end();
+  if(!res.headersSent)reply(res,503,{error:'Storage is unavailable. Check Supabase connection settings and run supabase/setup.sql. Your work was not saved to temporary storage.'});else res.end();
  } finally {if(lease)await storage.release(lease).catch(()=>console.error('Lease release failed'));}
 }
 if (!process.env.VERCEL) {

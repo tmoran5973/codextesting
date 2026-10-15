@@ -40,6 +40,7 @@ async function action(type, body) {
 }
 async function refresh() {
  const next=await request('/api/projects');next.busy ||= producing;const changed=JSON.stringify(next)!==JSON.stringify(data);data=next;
+ $('#storageStatus').textContent=data.storage==='supabase'?'Projects and artwork saved to Supabase.':data.storage==='local'?'Local development storage.':'Database storage connected.';
  $('#connection').textContent=data.configured?'API KEY CONNECTED':'API KEY NEEDED FOR GENERATION';
  $('#projects').innerHTML=data.projects.map(p=>`<button data-id="${p.id}">${escape(p.title)}</button>`).join('');
  document.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{clear();selected=b.dataset.id;showingForm=false;render();});

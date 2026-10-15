@@ -1,9 +1,9 @@
-# Review current hosting and disk charges in Render before creating resources.
+# Projects and artwork are stored in your separate Supabase project.
 services:
   - type: web
     name: coloring-studio
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci && npm test
     startCommand: npm start
     healthCheckPath: /healthz
@@ -13,15 +13,13 @@ services:
         value: 24.19.0
       - key: NODE_ENV
         value: production
-      - key: DATA_DIR
-        value: /var/data/coloring-studio
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: DEMO_PASSWORD
         generateValue: true
       - key: IMAGE_RESERVATION_USD
         value: '0.50'
       - key: REVIEW_RESERVATION_USD
         value: '0.05'
-    disk:
-      name: coloring-studio-data
-      mountPath: /var/data
-      sizeGB: 1
