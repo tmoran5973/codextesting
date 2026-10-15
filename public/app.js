@@ -48,3 +48,32 @@ async function refresh() {
 $('#new').onclick=()=>{clear();form();};
 await refresh().catch(error);form();
 setInterval(()=>refresh().catch(error),3000);
+
+function showKeyStatus(status) {
+ $('#keyStatus').textContent=status.unreadable
+  ? 'The saved key cannot be unlocked. Enter it again or remove it.'
+  :status.source==='app'?'An API key saved in this app is active.'
+  :status.source==='environment'?'A key from hosting environment settings is active. Saving here will override it.'
+  :'No API key connected. Add one to enable generation and quality checks.';
+ $('#removeKey').disabled=!status.hasSaved;
+}
+$('#settingsButton').onclick=async()=>{
+ $('#settingsError').textContent='';$('#apiKey').value='';$('#settingsDialog').showModal();
+ try{showKeyStatus(await request('/api/settings'));}catch(e){$('#settingsError').textContent=e.message;}
+};
+function closeSettings(){$('#apiKey').value='';$('#settingsDialog').close();}
+$('#closeSettings').onclick=closeSettings;
+$('#settingsDialog').addEventListener('close',()=>{$('#apiKey').value='';});
+async function updateKey(action){
+ const key=$('#apiKey').value;
+ if(action==='save'&&!key.trim()){$('#settingsError').textContent='Enter a new key, or close this panel to keep the current one.';return;}
+ $('#settingsError').textContent='';$('#saveKey').disabled=true;$('#removeKey').disabled=true;
+ try{
+  const status=await request('/api/settings',{action,...(action==='save'?{key}:{})});
+  $('#apiKey').value='';showKeyStatus(status);await refresh();
+  $('#settingsError').textContent=action==='save'?'Key saved. You can generate a sample now.':status.hasEnvironment?'App-saved key removed. The hosting environment key is now active.':'Saved key removed.';
+ }catch(e){$('#apiKey').value='';$('#settingsError').textContent=e.message;}
+ finally{$('#saveKey').disabled=false;try{showKeyStatus(await request('/api/settings'));}catch{}}
+}
+$('#settingsForm').onsubmit=event=>{event.preventDefault();updateKey('save');};
+$('#removeKey').onclick=()=>{if(confirm('Remove the key saved in this app? A hosting environment key, if set, will remain active.'))updateKey('remove');};

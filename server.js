@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as storage from './storage.js';
+import { keyStatus, saveKey, removeKey, publicKeyStatus, safeProviderError } from './credentials.js';
 import { authorized, sameOrigin } from './auth.js';
 import { validateProject, reserve, pagePrompt } from './workflow.js';
 
@@ -16,16 +17,16 @@ function reply(res, status, value) { res.writeHead(status, { 'Content-Type': 'ap
 async function body(req) { let data = ''; for await (const chunk of req) { data += chunk; if (data.length > 20000) throw new Error('Request too large.'); } return JSON.parse(data || '{}'); }
 function rate(name, fallback) { const value = Number(process.env[name] || fallback); if (!Number.isFinite(value) || value <= 0) throw new Error(`Set a positive ${name}.`); return value; }
 async function api(path, payload) {
-  const key = process.env.COLORING_API_KEY;
-  if (!key) throw new Error('Add COLORING_API_KEY to the server’s .env file and restart.');
+  const key = state().credentials.key;
+  if (!key) throw new Error('Open API settings and add your OpenAI API key.');
   const multipart = payload instanceof FormData;
   const response = await fetch(`https://api.openai.com/v1/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, ...(multipart ? {} : { 'Content-Type': 'application/json' }) }, body: multipart ? payload : JSON.stringify(payload), signal: AbortSignal.timeout(120000) });
   const result = await response.json();
-  if (!response.ok) throw new Error(`AI service: ${result.error?.message || response.status}`);
+  if (!response.ok) throw new Error(`AI service: ${safeProviderError(result.error?.message || response.status, key)}`);
   return result;
 }
 async function paid(project, kind, action) {
-  if (!process.env.COLORING_API_KEY) throw new Error('Add COLORING_API_KEY to .env and restart before running agents.');
+  if (!state().credentials.key) throw new Error('Open API settings and add your OpenAI API key before running agents.');
   const amount = kind === 'image' ? rate('IMAGE_RESERVATION_USD', .5) : rate('REVIEW_RESERVATION_USD', .05);
   reserve(project, amount);
   const event = { id: randomUUID(), kind, reservation: amount, at: new Date().toISOString(), status: 'started' };
@@ -80,12 +81,19 @@ async function handle(req, res) {
       res.setHeader('WWW-Authenticate', 'Basic realm="Coloring Studio", charset="UTF-8"');
       return reply(res, 401, { error: 'Sign in with username studio and your demo password.' });
     }
-    if (req.method === 'GET' && url.pathname === '/api/projects') return reply(res, 200, { projects: state().projects, configured: !!process.env.COLORING_API_KEY, busy: state().busy, imageReservation: rate('IMAGE_RESERVATION_USD', .5), reviewReservation: rate('REVIEW_RESERVATION_USD', .05) });
+    if (req.method === 'GET' && url.pathname === '/api/settings') return reply(res, 200, publicKeyStatus(state().credentials));
+    if (req.method === 'GET' && url.pathname === '/api/projects') return reply(res, 200, { projects: state().projects, configured: !!state().credentials.key, busy: state().busy, imageReservation: rate('IMAGE_RESERVATION_USD', .5), reviewReservation: rate('REVIEW_RESERVATION_USD', .05) });
     if (url.pathname.startsWith('/api/') && req.method === 'POST') {
       // Bind to loopback by default; reject cross-origin browser mutations.
       if (!sameOrigin(req.headers.origin, req.headers.host)) return reply(res, 403, { error: 'Cross-origin request rejected.' });
       if (state().busy && !state().lease) return reply(res, 409, { error: 'An agent is working. Wait until it finishes.' });
       const input = await body(req);
+      if (url.pathname === '/api/settings') {
+        if (input.action === 'remove') await removeKey();
+        else if (input.action === 'save') await saveKey(input.key, password);
+        else throw new Error('Unknown settings action.');
+        return reply(res, 200, publicKeyStatus(await keyStatus(password)));
+      }
       if (url.pathname === '/api/projects') {
         const validated = validateProject(input);
         const ideas = String(input.ideas || '').split('\n').map(s => s.trim()).filter(Boolean);
@@ -99,7 +107,7 @@ async function handle(req, res) {
       const action = match[2];
       if (action === 'budget') { const n = Number(input.budget); if (!Number.isFinite(n) || n < project.reserved || n > 1000) throw new Error('Budget must cover existing reservations and be at most $1,000.'); project.budget = n; await save(); return reply(res, 200, project); }
       if (action === 'batch') {
-        if (!process.env.COLORING_API_KEY) throw new Error('Add COLORING_API_KEY to .env and restart.');
+        if (!state().credentials.key) throw new Error('Open API settings and add your OpenAI API key.');
         const pages = project.pages.filter(p => !p.versions.length || (p.status !== 'approved' && !p.versions.at(-1).review));
         if (!pages.length) throw new Error('All generated pages have reviews. Approve them or request revisions.');
         // First batch is always one sample. Subsequent production requires explicit approval.
@@ -142,7 +150,8 @@ export async function requestHandler(req, res) {
   const loaded=await storage.load();
   // An expired lease means a previous serverless invocation was interrupted.
   if(!loaded.busy || lease) for(const project of loaded.projects) if(project.status==='running') {project.status='paused';project.error='Previous job was interrupted. Review completed pages before continuing.';}
-  await context.run({...loaded,lease},()=>handle(req,res));
+  const credentials = await keyStatus(password);
+  await context.run({...loaded,lease,credentials},()=>handle(req,res));
  } catch(e) {
   console.error('Request failed:', e.name);
   if(!res.headersSent)reply(res,503,{error:'Storage is unavailable. Check the deployment database configuration.'});else res.end();

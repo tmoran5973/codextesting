@@ -14,7 +14,7 @@ npm start
 
 The server uses port 3000 and binds to `127.0.0.1`. Local development has no login unless DEMO_PASSWORD is set. Production requires password protection; see DEPLOY.md before hosting it.
 
-To enable paid AI operations, copy `.env.example` to `.env`, enter your OpenAI API key locally, and restart. Never commit the key. Uses `gpt-image-1` for portrait medium-quality images and edits, and `gpt-4.1-mini` for structured visual reviews. Your account needs access and sufficient API credit. ChatGPT Plus does not pay for these calls.
+To enable paid AI operations, open **API settings** in the app and save your OpenAI API key. Set a login password of at least 16 characters first. Alternatively, supply `COLORING_API_KEY` in hosting environment settings or a local ignored `.env` file. Never commit the key. Uses `gpt-image-1` for portrait medium-quality images and edits, and `gpt-4.1-mini` for structured visual reviews. Your account needs access and sufficient API credit. ChatGPT Plus does not pay for these calls.
 
 Create a project with one page idea per line. Generate and approve the first sample before running the rest. Quality checks are advisory; only you can approve artwork. Revisions use the previous image as input, preserve version history, and stop after three revisions per page. Failed quality checks can be retried without generating the image again.
 
@@ -41,3 +41,10 @@ Not yet implemented: automated research, AI page planning, autonomous repair loo
 ## Online demo deployment
 
 See [DEPLOY.md](DEPLOY.md). `render.yaml` defines a password-protected, single-instance service with persistent storage. Production refuses to start without a `DEMO_PASSWORD` of at least 16 characters. Browser login username: `studio`. `DATA_DIR` configures the storage directory. `/healthz` is public but contains no project data. A host must supply HTTPS; the app listens on the platform's `PORT` and production binds to `0.0.0.0`.
+
+
+## API key settings
+
+The authenticated **API settings** panel adds, replaces, and removes a key without restarting. A saved key overrides `COLORING_API_KEY`; removing it restores the environment key if present. The server returns presence/source metadata only, never the key. Saving does not call OpenAI or validate API permissions. The input is masked and cleared after submission or closing the panel; no credential is stored in browser storage.
+
+App-saved keys use AES-256-GCM encryption with a key derived from `DEMO_PASSWORD` using scrypt. They are stored separately from projects in `credential.json` with owner-only file permissions (or a separate database table). Changing the login password requires entering the API key again. Anyone with the shared app login can change the key or initiate paid operations. On Render Free, saved credentials may disappear along with other temporary files when the service restarts or redeploys. Use environment configuration or persistent storage if retention is required.
