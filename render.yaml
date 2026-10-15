@@ -1,0 +1,27 @@
+# Review current hosting and disk charges in Render before creating resources.
+services:
+  - type: web
+    name: coloring-studio
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm test
+    startCommand: npm start
+    healthCheckPath: /healthz
+    numInstances: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data/coloring-studio
+      - key: DEMO_PASSWORD
+        generateValue: true
+      - key: IMAGE_RESERVATION_USD
+        value: '0.50'
+      - key: REVIEW_RESERVATION_USD
+        value: '0.05'
+    disk:
+      name: coloring-studio-data
+      mountPath: /var/data
+      sizeGB: 1
